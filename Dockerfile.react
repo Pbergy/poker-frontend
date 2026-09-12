@@ -1,0 +1,12 @@
+FROM node:20-alpine as build
+WORKDIR /app
+COPY . .
+RUN cd apps/react-spa && npm install && npm run build
+
+FROM node:20-alpine
+WORKDIR /app
+COPY --from=build /app/apps/react-spa/dist .
+RUN npm install -g serve
+EXPOSE 3000
+CMD ["serve", "-s", ".", "-l", "3000"]
+
