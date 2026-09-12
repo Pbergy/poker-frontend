@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Poker - Quick Play</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; }
+    input, button { padding: 10px; margin: 5px; }
+  </style>
+</head>
+<body>
+  <h1>🎰 Poker - Quick Play</h1>
+  <div>
+    <input type="text" id="name" placeholder="Enter your name">
+    <input type="text" id="roomId" placeholder="Room ID">
+    <button onclick="joinGame()">Join Game</button>
+  </div>
+  <script>
+    const API_URL = 'https://table-stakes-backend-vj1i-production.up.railway.app';
+    function joinGame() {
+      const name = document.getElementById('name').value;
+      const roomId = document.getElementById('roomId').value;
+      if (!name || !roomId) { alert('Enter name and room ID'); return; }
+      alert(`Joining room ${roomId} as ${name}`);
+      // Connect to backend WebSocket
+    }
+  </script>
+</body>
+</html>
+

@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Poker Admin Dashboard</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 1000px; margin: 50px auto; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 10px; border: 1px solid #ddd; text-align: left; }
+    th { background: #333; color: white; }
+    .btn { padding: 8px 15px; margin: 5px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <h1>🎰 Admin Dashboard</h1>
+  <div>
+    <input type="text" id="adminPass" placeholder="Admin Password" type="password">
+    <button class="btn" onclick="login()">Login</button>
+  </div>
+  <div id="dashboard" style="display:none;">
+    <h2>Active Rooms</h2>
+    <table>
+      <thead>
+        <tr><th>Room ID</th><th>Players</th><th>Pot</th><th>Action</th></tr>
+      </thead>
+      <tbody id="roomsList"></tbody>
+    </table>
+    <h2>Users</h2>
+    <table>
+      <thead>
+        <tr><th>User</th><th>Balance</th><th>Rooms</th></tr>
+      </thead>
+      <tbody id="usersList"></tbody>
+    </table>
+  </div>
+  <script>
+    function login() {
+      const pass = document.getElementById('adminPass').value;
+      if (pass === 'admin123') {
+        document.getElementById('dashboard').style.display = 'block';
+        loadData();
+      } else {
+        alert('Invalid password');
+      }
+    }
+    function loadData() {
+      // Fetch data from backend
+    }
+  </script>
+</body>
+</html>
+
