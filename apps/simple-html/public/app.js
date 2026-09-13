@@ -1,4 +1,4 @@
-const API_BASE = window.API_BASE || 'http://localhost:3000';
+const API_BASE = window.API_BASE || 'https://table-stakes-backend-vj1i-production.up.railway.app';
 const WS_BASE = window.WS_BASE || API_BASE.replace(/^http/, 'ws');
 
 const state = {
