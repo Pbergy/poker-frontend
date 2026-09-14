@@ -177,10 +177,16 @@ async function loadMyAdminRooms() {
         <div style="display:flex; gap:6px;">
           <button class="btn-link" data-invite="${r.id}">Invite</button>
           <button class="btn-primary small" data-joinadmin="${r.id}">Join</button>
+          <button class="btn-link" data-deleteroom="${r.id}" style="color:#ff9aa8;">Delete</button>
         </div>
       </div>`).join('');
     infoEl.querySelectorAll('[data-invite]').forEach(b => b.addEventListener('click', () => openInviteModal(b.dataset.invite)));
     infoEl.querySelectorAll('[data-joinadmin]').forEach(b => b.addEventListener('click', () => joinRoomById(b.dataset.joinadmin)));
+    infoEl.querySelectorAll('[data-deleteroom]').forEach(b => b.addEventListener('click', async () => {
+      if (!confirm('Delete this table? Everyone seated in it will be removed.')) return;
+      await api(`/api/admin/rooms/${b.dataset.deleteroom}`, { method: 'DELETE' }).catch(err => showToast(err.message));
+      loadMyAdminRooms();
+    }));
   } catch (err) { /* not fatal on lobby load */ }
 }
 
@@ -275,9 +281,14 @@ async function enterTable(roomId) {
 
 async function refreshRoomHeader(roomId) {
   try {
-    const rooms = await api('/api/admin/rooms').catch(() => []);
-    const found = rooms.find(r => r.id === roomId);
-    $('#table-room-name').textContent = found ? found.name : 'Table';
+    const room = await api(`/api/rooms/id/${roomId}`).catch(() => null);
+    $('#table-room-name').textContent = room ? room.name : 'Table';
+
+    $('#btn-table-invite').classList.add('hidden');
+    if (state.user.is_admin && room && room.is_admin_room) {
+      $('#btn-table-invite').classList.remove('hidden');
+      $('#btn-table-invite').onclick = () => openInviteModal(roomId);
+    }
   } catch (e) { /* non-fatal */ }
 }
 
