@@ -104,6 +104,28 @@ function enterLobby() {
   showView('lobby');
   loadPublicRooms();
   ensureAdminRoomUI();
+  loadInvitedRooms();
+}
+
+async function loadInvitedRooms() {
+  try {
+    const rooms = await api('/api/rooms/invited');
+    let card = document.getElementById('invited-rooms-card');
+    if (rooms.length === 0) { if (card) card.remove(); return; }
+    if (!card) {
+      card = document.createElement('div');
+      card.id = 'invited-rooms-card';
+      card.className = 'card';
+      card.innerHTML = '<h2>Private Tables You\'re Invited To</h2><div id="invited-rooms-list"></div>';
+      $('.lobby-grid').appendChild(card);
+    }
+    $('#invited-rooms-list').innerHTML = rooms.map(r => `
+      <div class="room-row">
+        <div><strong>${r.name}</strong><div class="room-meta">Code ${r.room_code}</div></div>
+        <button class="btn-primary small" data-jointinvited="${r.id}">Join</button>
+      </div>`).join('');
+    card.querySelectorAll('[data-jointinvited]').forEach(b => b.addEventListener('click', () => joinRoomById(b.dataset.jointinvited)));
+  } catch (err) { /* not fatal on lobby load */ }
 }
 
 async function loadPublicRooms() {
@@ -133,9 +155,9 @@ function ensureAdminRoomUI() {
   card.id = 'admin-room-card';
   card.innerHTML = `
     <h2>Your Private Table</h2>
-    <p class="hint">Invite-only room only people you add can join.</p>
-    <button id="btn-create-admin-room" class="btn-primary">Create Private Table</button>
-    <div id="admin-room-info"></div>
+    <p class="hint">Invite-only &mdash; only people you add by username can join.</p>
+    <div id="admin-room-info"><p class="muted">Loading&hellip;</p></div>
+    <button id="btn-create-admin-room" class="btn-link">+ Create another private table</button>
   `;
   $('.lobby-grid').appendChild(card);
   $('#btn-create-admin-room').addEventListener('click', createAdminRoom);
@@ -182,7 +204,7 @@ async function loadInvites() {
   try {
     const invites = await api(`/api/admin/rooms/${inviteRoomId}/invites`);
     $('#invite-list').innerHTML = invites.map(i => `
-      <div class="invite-row"><span>${i.username} (${i.status})</span>
+      <div class="invite-row"><span>${i.username} (${i.status})${i.chips != null ? ` &mdash; ${i.chips} chips` : ''}</span>
       <button class="btn-link" data-revoke="${i.username}">remove</button></div>`).join('') || '<p class="muted">No invites yet.</p>';
     $$('[data-revoke]').forEach(b => b.addEventListener('click', async () => {
       await api(`/api/admin/rooms/${inviteRoomId}/invite/${b.dataset.revoke}`, { method: 'DELETE' });
