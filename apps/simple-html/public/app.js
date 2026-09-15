@@ -8,7 +8,8 @@ const state = {
   room: null,
   ws: null,
   pollTimer: null,
-  isReady: false
+  isReady: false,
+  isSpectating: false
 };
 
 // ---------- tiny helpers ----------
@@ -220,11 +221,27 @@ async function loadInvites() {
   try {
     const invites = await api(`/api/admin/rooms/${inviteRoomId}/invites`);
     $('#invite-list').innerHTML = invites.map(i => `
-      <div class="invite-row"><span>${i.username} (${i.status})${i.chips != null ? ` &mdash; ${i.chips} chips` : ''}</span>
-      <button class="btn-link" data-revoke="${i.username}">remove</button></div>`).join('') || '<p class="muted">No invites yet.</p>';
+      <div class="invite-row">
+        <span>${i.username} (${i.status})${i.chips != null ? ` &mdash; ${i.chips} chips` : ''}</span>
+        <div style="display:flex; gap:6px; align-items:center;">
+          <input type="number" class="give-chips-amount" data-user="${i.username}" placeholder="amount" style="width:70px; margin:0; padding:4px;">
+          <button class="btn-link" data-give="${i.username}">Give</button>
+          <button class="btn-link" data-revoke="${i.username}" style="color:#ff9aa8;">remove</button>
+        </div>
+      </div>`).join('') || '<p class="muted">No invites yet.</p>';
     $$('[data-revoke]').forEach(b => b.addEventListener('click', async () => {
       await api(`/api/admin/rooms/${inviteRoomId}/invite/${b.dataset.revoke}`, { method: 'DELETE' });
       loadInvites();
+    }));
+    $$('[data-give]').forEach(b => b.addEventListener('click', async () => {
+      const input = document.querySelector(`.give-chips-amount[data-user="${b.dataset.give}"]`);
+      const amount = Number(input.value);
+      if (!amount) return;
+      try {
+        await api(`/api/admin/rooms/${inviteRoomId}/give-chips`, { method: 'POST', body: { username: b.dataset.give, amount } });
+        showToast(`Gave ${amount} chips to ${b.dataset.give}`);
+        loadInvites();
+      } catch (err) { showToast(err.message); }
     }));
   } catch (err) { showToast(err.message); }
 }
@@ -292,12 +309,16 @@ async function refreshRoomHeader(roomId) {
   try {
     const room = await api(`/api/rooms/id/${roomId}`).catch(() => null);
     $('#table-room-name').textContent = room ? room.name : 'Table';
+    state.isSpectating = !!(room && room.is_admin_room && room.creator_id === state.user.id);
 
     $('#btn-table-invite').classList.add('hidden');
     if (state.user.is_admin && room && room.is_admin_room) {
       $('#btn-table-invite').classList.remove('hidden');
       $('#btn-table-invite').onclick = () => openInviteModal(roomId);
     }
+
+    // The admin spectates their own private table — no ready button, never dealt in.
+    $('#btn-ready').classList.toggle('hidden', state.isSpectating);
   } catch (e) { /* non-fatal */ }
 }
 

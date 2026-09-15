@@ -175,7 +175,7 @@ button { font-family: inherit; cursor: pointer; }
   padding: 24px; width: 340px; max-height: 80vh; overflow-y: auto;
 }
 .invite-list { margin-top: 12px; max-height: 200px; overflow-y: auto; }
-.invite-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; }
+.invite-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; font-size: 13px; flex-wrap: wrap; gap: 6px; }
 .toast {
   position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
   background: #1a1208; color: #cda149; border: 1px solid #cda149;
