@@ -12,6 +12,41 @@ const state = {
   isSpectating: false
 };
 
+// ---------- sound effects (synthesized, no external audio files) ----------
+let audioCtx = null;
+function getAudioCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
+}
+
+function playSound(kind) {
+  try {
+    const ctx = getAudioCtx();
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+
+    if (kind === 'deal') {
+      osc.type = 'triangle'; osc.frequency.setValueAtTime(520, now);
+      gain.gain.setValueAtTime(0.08, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+      osc.start(now); osc.stop(now + 0.12);
+    } else if (kind === 'chip') {
+      osc.type = 'square'; osc.frequency.setValueAtTime(800, now);
+      gain.gain.setValueAtTime(0.05, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+      osc.start(now); osc.stop(now + 0.06);
+    } else if (kind === 'win') {
+      [660, 880, 1100].forEach((freq, i) => {
+        const o = ctx.createOscillator(); const g = ctx.createGain();
+        o.connect(g); g.connect(ctx.destination);
+        o.type = 'sine'; o.frequency.setValueAtTime(freq, now + i * 0.1);
+        g.gain.setValueAtTime(0.07, now + i * 0.1); g.gain.exponentialRampToValueAtTime(0.001, now + i * 0.1 + 0.25);
+        o.start(now + i * 0.1); o.stop(now + i * 0.1 + 0.25);
+      });
+    }
+  } catch (e) { /* audio not available/allowed yet — non-fatal */ }
+}
+
 // ---------- tiny helpers ----------
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
@@ -29,6 +64,15 @@ async function api(path, { method = 'GET', body } = {}) {
   const res = await fetch(`${API_BASE}${path}`, {
     method, headers, body: body ? JSON.stringify(body) : undefined
   });
+  if (res.status === 401) {
+    localStorage.removeItem('ts_token');
+    localStorage.removeItem('ts_user');
+    localStorage.removeItem('ts_room');
+    state.token = null; state.user = null;
+    showView('auth');
+    showToast('Your session expired — please log in again');
+    throw new Error('Session expired');
+  }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || 'Request failed');
   return data;
@@ -295,8 +339,8 @@ async function joinRoomById(roomId) {
 // ---------- table ----------
 async function enterTable(roomId) {
   state.roomId = roomId;
+  localStorage.setItem('ts_room', roomId);
   showView('table');
-  const room = await api(`/api/rooms/${(await api(`/api/players/room/${roomId}`).catch(() => []))[0]?.room_id || roomId}`).catch(() => null);
   await refreshRoomHeader(roomId);
   connectWS(roomId);
   await refreshTable();
@@ -323,8 +367,11 @@ async function refreshRoomHeader(roomId) {
 }
 
 $('#btn-leave-table').addEventListener('click', () => {
+  state.leavingTable = true;
   if (state.ws) state.ws.close();
   if (state.pollTimer) clearInterval(state.pollTimer);
+  state.roomId = null;
+  localStorage.removeItem('ts_room');
   showView('lobby');
   loadPublicRooms();
   refreshMyBalance();
@@ -347,23 +394,34 @@ function updateReadyButton() {
 }
 
 function connectWS(roomId) {
-  if (state.ws) state.ws.close();
+  if (state.ws) { state.ws.onclose = null; state.ws.close(); }
+  state.leavingTable = false;
+  state.wsRetryDelay = 1000;
+
   const ws = new WebSocket(WS_BASE);
   state.ws = ws;
   ws.addEventListener('open', () => {
     ws.send(JSON.stringify({ type: 'join', userId: state.user.id, roomId }));
+    state.wsRetryDelay = 1000;
+    if (state.pollTimer) { clearInterval(state.pollTimer); state.pollTimer = null; }
   });
   ws.addEventListener('message', (evt) => {
     const msg = JSON.parse(evt.data);
     if (msg.type === 'game_update') renderGameState(msg.data);
     else if (msg.type === 'chat') appendChatMessage(msg);
     else if (msg.type === 'ready_update') applyReadyUpdate(msg.players);
-    else if (msg.type === 'hand_complete') { loadHandLog(roomId); loadHandHistory(roomId); }
+    else if (msg.type === 'presence') loadRoomPlayers().then(() => refreshTable());
+    else if (msg.type === 'hand_complete') { loadHandLog(roomId); loadHandHistory(roomId); playSound('win'); }
     else if (msg.type === 'error') showToast(msg.message);
   });
   ws.addEventListener('close', () => {
-    // Fall back to polling if the socket drops
+    // Fall back to REST polling immediately, and keep trying to re-establish the socket
+    // with backoff (capped at 10s) so a dropped connection heals itself automatically.
     if (!state.pollTimer) state.pollTimer = setInterval(refreshTable, 2500);
+    if (!state.leavingTable && state.roomId === roomId) {
+      setTimeout(() => { if (state.roomId === roomId) connectWS(roomId); }, state.wsRetryDelay);
+      state.wsRetryDelay = Math.min(state.wsRetryDelay * 2, 10000);
+    }
   });
 }
 
@@ -395,7 +453,9 @@ function applyReadyUpdate(players) {
 }
 
 async function renderGameState(gameRow) {
-  const players = await loadRoomPlayers();
+  // The player list (usernames, idle chip counts) rarely changes mid-hand, so it's cached
+  // and only refetched when actually stale — not on every single action broadcast.
+  const players = lastRoomPlayers.length ? lastRoomPlayers : await loadRoomPlayers();
   const gs = gameRow && gameRow.game_state;
 
   if (!gs || gameRow.status === 'no_game') {
@@ -404,7 +464,13 @@ async function renderGameState(gameRow) {
     $('#pot-display').textContent = 'Pot: 0';
     $('#table-pot-badge').textContent = 'Pot: 0';
     $('#action-bar').classList.add('hidden');
+    state.lastHandNumber = null;
     return;
+  }
+
+  if (gs.handNumber !== state.lastHandNumber) {
+    if (state.lastHandNumber !== undefined && state.lastHandNumber !== null) playSound('deal');
+    state.lastHandNumber = gs.handNumber;
   }
 
   $('#community-cards').innerHTML = gs.community.map(c => renderCard(c)).join('');
@@ -478,6 +544,7 @@ $('#raise-slider').addEventListener('input', () => { $('#raise-amount').value = 
 $('#raise-amount').addEventListener('input', () => { $('#raise-slider').value = $('#raise-amount').value; });
 
 function sendAction(type, amount) {
+  playSound('chip');
   const payload = { type: 'action', userId: state.user.id, roomId: state.roomId, payload: { type, amount } };
   if (state.ws && state.ws.readyState === WebSocket.OPEN) {
     state.ws.send(JSON.stringify(payload));
@@ -561,4 +628,10 @@ $('#btn-my-history').addEventListener('click', async () => {
 $('#btn-close-stats').addEventListener('click', () => $('#modal-stats').classList.add('hidden'));
 
 // ---------- boot ----------
-if (state.token && state.user) enterLobby(); else showView('auth');
+if (state.token && state.user) {
+  enterLobby();
+  const savedRoom = localStorage.getItem('ts_room');
+  if (savedRoom) enterTable(savedRoom);
+} else {
+  showView('auth');
+}
