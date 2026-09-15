@@ -219,13 +219,13 @@ function ensureAdminRoomUI() {
   loadMyAdminRooms();
 }
 
-async function loadMyAdminRooms() {
+async function loadMyAdminRooms(isRetry = false) {
   try {
     const rooms = await api('/api/admin/rooms');
     const mine = rooms.filter(r => r.is_admin_room);
     const infoEl = $('#admin-room-info');
     if (!infoEl) return;
-    if (mine.length === 0) { infoEl.innerHTML = ''; return; }
+    if (mine.length === 0) { infoEl.innerHTML = '<p class="muted">Setting up your table&hellip;</p>'; return; }
     infoEl.innerHTML = mine.map(r => `
       <div class="room-row">
         <div><strong>${r.name}</strong><div class="room-meta">Code ${r.room_code}</div></div>
@@ -242,7 +242,14 @@ async function loadMyAdminRooms() {
       await api(`/api/admin/rooms/${b.dataset.deleteroom}`, { method: 'DELETE' }).catch(err => showToast(err.message));
       loadMyAdminRooms();
     }));
-  } catch (err) { /* not fatal on lobby load */ }
+  } catch (err) {
+    // Don't let a transient failure make the private table look like it disappeared —
+    // retry once automatically, and only then show a visible, actionable error.
+    if (!isRetry) { setTimeout(() => loadMyAdminRooms(true), 1500); return; }
+    const infoEl = $('#admin-room-info');
+    if (infoEl) infoEl.innerHTML = `<p class="muted">Couldn't load your table &mdash; <button class="btn-link" id="retry-admin-rooms">retry</button></p>`;
+    document.getElementById('retry-admin-rooms')?.addEventListener('click', () => loadMyAdminRooms());
+  }
 }
 
 async function createAdminRoom() {
