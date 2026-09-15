@@ -106,6 +106,15 @@ function enterLobby() {
   loadPublicRooms();
   ensureAdminRoomUI();
   loadInvitedRooms();
+  refreshMyBalance();
+}
+
+async function refreshMyBalance() {
+  try {
+    const stats = await api('/api/players/me/stats');
+    const badge = document.getElementById('lobby-balance');
+    if (badge) badge.textContent = `${stats.balance} chips`;
+  } catch (err) { /* non-fatal */ }
 }
 
 async function loadInvitedRooms() {
@@ -239,8 +248,7 @@ $('#form-create-room').addEventListener('submit', async (e) => {
         maxPlayers: Number($('#create-room-max').value),
         settings: {
           smallBlind: Number($('#create-room-sb').value),
-          bigBlind: Number($('#create-room-bb').value),
-          startingChips: Number($('#create-room-chips').value)
+          bigBlind: Number($('#create-room-bb').value)
         }
       }
     });
@@ -298,6 +306,7 @@ $('#btn-leave-table').addEventListener('click', () => {
   if (state.pollTimer) clearInterval(state.pollTimer);
   showView('lobby');
   loadPublicRooms();
+  refreshMyBalance();
 });
 
 $('#btn-ready').addEventListener('click', async () => {
@@ -520,6 +529,7 @@ $('#btn-my-history').addEventListener('click', async () => {
   try {
     const stats = await api('/api/players/me/stats');
     $('#stats-body').innerHTML = `
+      <p>Current balance: <strong>${stats.balance} chips</strong></p>
       <p>Hands won: <strong>${stats.hands_won}</strong></p>
       <p>Hands lost: <strong>${stats.hands_lost}</strong></p>
       <p>Net result: <strong>${stats.net_result >= 0 ? '+' : ''}${stats.net_result} chips</strong></p>
