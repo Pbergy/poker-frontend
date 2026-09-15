@@ -159,6 +159,16 @@ async function refreshMyBalance() {
     const stats = await api('/api/players/me/stats');
     const badge = document.getElementById('lobby-balance');
     if (badge) badge.textContent = `${stats.balance} chips`;
+
+    // is_admin is baked into the login token, so it only reflects reality as of whenever
+    // you last logged in. If the account was promoted since then (e.g. via the
+    // ADMIN_USERNAME bootstrap), resync it here instead of requiring a fresh login.
+    if (stats.is_admin !== state.user.is_admin) {
+      state.user.is_admin = stats.is_admin;
+      localStorage.setItem('ts_user', JSON.stringify(state.user));
+      $('#lobby-admin-badge').classList.toggle('hidden', !state.user.is_admin);
+      if (state.user.is_admin) ensureAdminRoomUI();
+    }
   } catch (err) { /* non-fatal */ }
 }
 
