@@ -7,7 +7,8 @@ const state = {
   roomId: null,
   room: null,
   ws: null,
-  pollTimer: null
+  pollTimer: null,
+  isReady: false
 };
 
 // ---------- tiny helpers ----------
@@ -299,12 +300,21 @@ $('#btn-leave-table').addEventListener('click', () => {
   loadPublicRooms();
 });
 
-$('#btn-deal').addEventListener('click', async () => {
+$('#btn-ready').addEventListener('click', async () => {
   try {
-    await api(`/api/game/rooms/${state.roomId}/deal`, { method: 'POST' });
-    refreshTable();
+    const nowReady = !state.isReady;
+    const result = await api(`/api/rooms/${state.roomId}/ready`, { method: 'POST', body: { ready: nowReady } });
+    state.isReady = result.ready;
+    updateReadyButton();
+    if (result.dealt) showToast('Everyone\'s in — dealing!');
   } catch (err) { showToast(err.message); }
 });
+
+function updateReadyButton() {
+  const btn = $('#btn-ready');
+  btn.textContent = state.isReady ? 'Cancel Ready' : "I'm Ready";
+  btn.classList.toggle('btn-action', state.isReady);
+}
 
 function connectWS(roomId) {
   if (state.ws) state.ws.close();
@@ -317,6 +327,7 @@ function connectWS(roomId) {
     const msg = JSON.parse(evt.data);
     if (msg.type === 'game_update') renderGameState(msg.data);
     else if (msg.type === 'chat') appendChatMessage(msg);
+    else if (msg.type === 'ready_update') applyReadyUpdate(msg.players);
     else if (msg.type === 'hand_complete') { loadHandLog(roomId); loadHandHistory(roomId); }
     else if (msg.type === 'error') showToast(msg.message);
   });
@@ -336,7 +347,21 @@ async function refreshTable() {
 let lastRoomPlayers = [];
 async function loadRoomPlayers() {
   lastRoomPlayers = await api(`/api/players/room/${state.roomId}`).catch(() => []);
+  const mine = lastRoomPlayers.find(p => p.user_id === state.user.id);
+  if (mine) { state.isReady = !!mine.is_ready; updateReadyButton(); }
   return lastRoomPlayers;
+}
+
+function applyReadyUpdate(players) {
+  players.forEach(p => {
+    const entry = lastRoomPlayers.find(rp => rp.user_id === p.user_id);
+    if (entry) entry.is_ready = p.is_ready;
+    if (p.user_id === state.user.id) { state.isReady = p.is_ready; updateReadyButton(); }
+  });
+  // Only meaningful while waiting for a hand — re-render idle seats if that's what's showing
+  if ($('#action-bar').classList.contains('hidden') && $('#seats').querySelector('.seat')) {
+    $('#seats').innerHTML = lastRoomPlayers.map((p, i) => renderIdleSeat(p, i, lastRoomPlayers.length)).join('');
+  }
 }
 
 async function renderGameState(gameRow) {
@@ -379,6 +404,10 @@ async function renderGameState(gameRow) {
   }).join('');
   $('#seats').innerHTML = seatsHtml;
 
+  if (gs.stage === 'complete') {
+    setTimeout(() => { if (state.roomId) refreshTable(); }, 4000);
+  }
+
   updateActionBar(gs);
 }
 
@@ -386,10 +415,11 @@ function renderIdleSeat(p, i, total) {
   const angle = (2 * Math.PI * i) / total - Math.PI / 2;
   const x = 50 + 42 * Math.cos(angle);
   const y = 50 + 40 * Math.sin(angle);
-  return `<div class="seat" style="left:${x}%; top:${y}%;">
+  return `<div class="seat ${p.is_ready ? 'ready' : ''}" style="left:${x}%; top:${y}%;">
     <div class="seat-card">
       <div class="seat-name">${p.username}</div>
       <div class="seat-chips">${p.chips} chips</div>
+      <div class="seat-ready-badge">${p.is_ready ? '&#10003; Ready' : 'Waiting&hellip;'}</div>
     </div>
   </div>`;
 }
