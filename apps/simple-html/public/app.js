@@ -305,8 +305,9 @@ async function loadInvites() {
       <div class="invite-row">
         <span>${i.username} (${i.status})${i.chips != null ? ` &mdash; ${i.chips} chips` : ''}</span>
         <div style="display:flex; gap:6px; align-items:center;">
-          <input type="number" class="give-chips-amount" data-user="${i.username}" placeholder="amount" style="width:70px; margin:0; padding:4px;">
+          <input type="number" class="give-chips-amount" data-user="${i.username}" placeholder="amount" min="0" style="width:70px; margin:0; padding:4px;">
           <button class="btn-link" data-give="${i.username}">Give</button>
+          <button class="btn-link" data-take="${i.username}" style="color:#ff9aa8;">Take</button>
           <button class="btn-link" data-revoke="${i.username}" style="color:#ff9aa8;">remove</button>
         </div>
       </div>`).join('') || '<p class="muted">No invites yet.</p>';
@@ -314,16 +315,18 @@ async function loadInvites() {
       await api(`/api/admin/rooms/${inviteRoomId}/invite/${b.dataset.revoke}`, { method: 'DELETE' });
       loadInvites();
     }));
-    $$('[data-give]').forEach(b => b.addEventListener('click', async () => {
-      const input = document.querySelector(`.give-chips-amount[data-user="${b.dataset.give}"]`);
-      const amount = Number(input.value);
+    const doAdjust = async (username, sign) => {
+      const input = document.querySelector(`.give-chips-amount[data-user="${username}"]`);
+      const amount = Math.abs(Number(input.value)) * sign;
       if (!amount) return;
       try {
-        await api(`/api/admin/rooms/${inviteRoomId}/give-chips`, { method: 'POST', body: { username: b.dataset.give, amount } });
-        showToast(`Gave ${amount} chips to ${b.dataset.give}`);
+        await api(`/api/admin/rooms/${inviteRoomId}/give-chips`, { method: 'POST', body: { username, amount } });
+        showToast(`${amount > 0 ? 'Gave' : 'Took'} ${Math.abs(amount)} chips ${amount > 0 ? 'to' : 'from'} ${username}`);
         loadInvites();
       } catch (err) { showToast(err.message); }
-    }));
+    };
+    $$('[data-give]').forEach(b => b.addEventListener('click', () => doAdjust(b.dataset.give, 1)));
+    $$('[data-take]').forEach(b => b.addEventListener('click', () => doAdjust(b.dataset.take, -1)));
   } catch (err) { showToast(err.message); }
 }
 
@@ -690,20 +693,24 @@ async function loadManageChips() {
       <div class="invite-row">
         <span>${u.username}${u.is_admin ? ' (admin)' : ''} &mdash; ${u.balance} chips</span>
         <div style="display:flex; gap:6px; align-items:center;">
-          <input type="number" class="manage-chips-amount" data-user="${u.username}" placeholder="amount" style="width:80px; margin:0; padding:4px;">
+          <input type="number" class="manage-chips-amount" data-user="${u.username}" placeholder="amount" min="0" style="width:80px; margin:0; padding:4px;">
           <button class="btn-link" data-manage-give="${u.username}">Give</button>
+          <button class="btn-link" data-manage-take="${u.username}" style="color:#ff9aa8;">Take</button>
         </div>
       </div>`).join('');
-    $$('[data-manage-give]').forEach(b => b.addEventListener('click', async () => {
-      const input = document.querySelector(`.manage-chips-amount[data-user="${b.dataset.manageGive}"]`);
-      const amount = Number(input.value);
+
+    const doAdjust = async (username, sign) => {
+      const input = document.querySelector(`.manage-chips-amount[data-user="${username}"]`);
+      const amount = Math.abs(Number(input.value)) * sign;
       if (!amount) return;
       try {
-        await api(`/api/admin/users/${b.dataset.manageGive}/give-chips`, { method: 'POST', body: { amount } });
-        showToast(`${amount > 0 ? 'Gave' : 'Took'} ${Math.abs(amount)} chips ${amount > 0 ? 'to' : 'from'} ${b.dataset.manageGive}`);
+        await api(`/api/admin/users/${username}/give-chips`, { method: 'POST', body: { amount } });
+        showToast(`${amount > 0 ? 'Gave' : 'Took'} ${Math.abs(amount)} chips ${amount > 0 ? 'to' : 'from'} ${username}`);
         loadManageChips();
       } catch (err) { showToast(err.message); }
-    }));
+    };
+    $$('[data-manage-give]').forEach(b => b.addEventListener('click', () => doAdjust(b.dataset.manageGive, 1)));
+    $$('[data-manage-take]').forEach(b => b.addEventListener('click', () => doAdjust(b.dataset.manageTake, -1)));
   } catch (err) { showToast(err.message); }
 }
 
