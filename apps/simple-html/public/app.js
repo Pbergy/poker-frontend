@@ -147,6 +147,7 @@ $('#btn-logout').addEventListener('click', () => {
 function enterLobby() {
   $('#lobby-username').textContent = state.user.username;
   $('#lobby-admin-badge').classList.toggle('hidden', !state.user.is_admin);
+  $('#btn-manage-chips').classList.toggle('hidden', !state.user.is_admin);
   showView('lobby');
   loadPublicRooms();
   ensureAdminRoomUI();
@@ -167,6 +168,7 @@ async function refreshMyBalance() {
       state.user.is_admin = stats.is_admin;
       localStorage.setItem('ts_user', JSON.stringify(state.user));
       $('#lobby-admin-badge').classList.toggle('hidden', !state.user.is_admin);
+      $('#btn-manage-chips').classList.toggle('hidden', !state.user.is_admin);
       if (state.user.is_admin) ensureAdminRoomUI();
     }
   } catch (err) { /* non-fatal */ }
@@ -371,6 +373,7 @@ async function refreshRoomHeader(roomId) {
     const room = await api(`/api/rooms/id/${roomId}`).catch(() => null);
     $('#table-room-name').textContent = room ? room.name : 'Table';
     state.isSpectating = !!(room && room.is_admin_room && room.creator_id === state.user.id);
+    state.currentRoomIsAdminRoom = !!(room && room.is_admin_room);
 
     $('#btn-table-invite').classList.add('hidden');
     if (state.user.is_admin && room && room.is_admin_room) {
@@ -383,10 +386,20 @@ async function refreshRoomHeader(roomId) {
   } catch (e) { /* non-fatal */ }
 }
 
-$('#btn-leave-table').addEventListener('click', () => {
+$('#btn-leave-table').addEventListener('click', async () => {
   state.leavingTable = true;
   if (state.ws) state.ws.close();
   if (state.pollTimer) clearInterval(state.pollTimer);
+
+  // Private tables cash your chips back to your account balance on the way out —
+  // otherwise they'd just be stranded at that table forever.
+  if (state.currentRoomIsAdminRoom && !state.isSpectating) {
+    try {
+      const result = await api(`/api/rooms/${state.roomId}/leave`, { method: 'POST' });
+      if (result.cashedOut > 0) showToast(`Cashed out ${result.cashedOut} chips to your balance`);
+    } catch (err) { showToast(err.message); }
+  }
+
   state.roomId = null;
   localStorage.removeItem('ts_room');
   showView('lobby');
@@ -541,7 +554,19 @@ function updateActionBar(gs) {
   const myPos = gs.players.findIndex(p => p.id === state.user.id);
   const isMyTurn = myPos !== -1 && myPos === gs.currentTurnPos && gs.stage !== 'complete';
   $('#action-bar').classList.toggle('hidden', !isMyTurn);
+  if (state.turnTimerInterval) { clearInterval(state.turnTimerInterval); state.turnTimerInterval = null; }
   if (!isMyTurn) return;
+
+  if (gs.turnStartedAt) {
+    const TURN_LIMIT_S = 45;
+    const tick = () => {
+      const remaining = Math.max(0, TURN_LIMIT_S - Math.floor((Date.now() - gs.turnStartedAt) / 1000));
+      $('#my-turn-indicator').textContent = `Your turn — ${remaining}s`;
+      if (remaining === 0 && state.turnTimerInterval) clearInterval(state.turnTimerInterval);
+    };
+    tick();
+    state.turnTimerInterval = setInterval(tick, 1000);
+  }
 
   const me = gs.players[myPos];
   const toCall = gs.currentBet - me.committed;
@@ -628,6 +653,49 @@ async function loadHandHistory(roomId) {
     }).join('') || '<p class="muted">No hands played yet.</p>';
   } catch (err) { /* ignore */ }
 }
+
+// ---------- manage chips (admin, account-wide) ----------
+$('#btn-manage-chips').addEventListener('click', () => {
+  $('#modal-manage-chips').classList.remove('hidden');
+  loadManageChips();
+});
+$('#btn-close-manage-chips').addEventListener('click', () => $('#modal-manage-chips').classList.add('hidden'));
+
+async function loadManageChips() {
+  try {
+    const users = await api('/api/admin/users');
+    $('#manage-chips-list').innerHTML = users.map(u => `
+      <div class="invite-row">
+        <span>${u.username}${u.is_admin ? ' (admin)' : ''} &mdash; ${u.balance} chips</span>
+        <div style="display:flex; gap:6px; align-items:center;">
+          <input type="number" class="manage-chips-amount" data-user="${u.username}" placeholder="amount" style="width:80px; margin:0; padding:4px;">
+          <button class="btn-link" data-manage-give="${u.username}">Give</button>
+        </div>
+      </div>`).join('');
+    $$('[data-manage-give]').forEach(b => b.addEventListener('click', async () => {
+      const input = document.querySelector(`.manage-chips-amount[data-user="${b.dataset.manageGive}"]`);
+      const amount = Number(input.value);
+      if (!amount) return;
+      try {
+        await api(`/api/admin/users/${b.dataset.manageGive}/give-chips`, { method: 'POST', body: { amount } });
+        showToast(`${amount > 0 ? 'Gave' : 'Took'} ${Math.abs(amount)} chips ${amount > 0 ? 'to' : 'from'} ${b.dataset.manageGive}`);
+        loadManageChips();
+      } catch (err) { showToast(err.message); }
+    }));
+  } catch (err) { showToast(err.message); }
+}
+
+// ---------- leaderboard ----------
+$('#btn-leaderboard').addEventListener('click', async () => {
+  try {
+    const rows = await api('/api/players/leaderboard');
+    $('#leaderboard-list').innerHTML = rows.map((r, i) => `
+      <div>${i + 1}. <strong>${r.username}</strong> &mdash; ${r.netResult >= 0 ? '+' : ''}${r.netResult} chips (${r.handsWon} wins)</div>
+    `).join('') || '<p class="muted">No hands played yet.</p>';
+    $('#modal-leaderboard').classList.remove('hidden');
+  } catch (err) { showToast(err.message); }
+});
+$('#btn-close-leaderboard').addEventListener('click', () => $('#modal-leaderboard').classList.add('hidden'));
 
 // ---------- stats modal ----------
 $('#btn-my-history').addEventListener('click', async () => {

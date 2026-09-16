@@ -42,6 +42,8 @@
       <span id="lobby-username"></span>
       <span id="lobby-admin-badge" class="badge hidden">ADMIN</span>
       <span id="lobby-balance" class="badge gold"></span>
+      <button id="btn-manage-chips" class="btn-link hidden">Manage Chips</button>
+      <button id="btn-leaderboard" class="btn-link">Leaderboard</button>
       <button id="btn-my-history" class="btn-link">My Stats</button>
       <button id="btn-logout" class="btn-link">Log Out</button>
     </div>
@@ -141,12 +143,32 @@
 <div id="modal-invite" class="modal hidden">
   <div class="modal-box">
     <h2>Invite to Private Table</h2>
+    <p class="hint">Use a negative number in the amount field to take chips away.</p>
     <form id="form-invite">
       <input type="text" id="invite-username" placeholder="Username to invite" required>
       <button type="submit" class="btn-primary">Invite</button>
     </form>
     <div id="invite-list" class="invite-list"></div>
     <button id="btn-close-invite" class="btn-link">Close</button>
+  </div>
+</div>
+
+<!-- MANAGE CHIPS MODAL (admin: account-wide balances) -->
+<div id="modal-manage-chips" class="modal hidden">
+  <div class="modal-box">
+    <h2>Manage Chips</h2>
+    <p class="hint">New accounts start at 0 &mdash; this is the only way anyone gets chips outside of winning them. Use a negative number to take chips away.</p>
+    <div id="manage-chips-list" class="invite-list"></div>
+    <button id="btn-close-manage-chips" class="btn-link">Close</button>
+  </div>
+</div>
+
+<!-- LEADERBOARD MODAL -->
+<div id="modal-leaderboard" class="modal hidden">
+  <div class="modal-box">
+    <h2>Leaderboard</h2>
+    <div id="leaderboard-list" class="log-list"></div>
+    <button id="btn-close-leaderboard" class="btn-link">Close</button>
   </div>
 </div>
 
