@@ -10,8 +10,21 @@
 
 <div id="toast" class="toast hidden"></div>
 
+<!-- LANDING -->
+<section id="view-landing" class="view">
+  <div class="landing">
+    <div class="landing-content">
+      <div class="landing-suits">&#9824; &#9829; &#9827; &#9830;</div>
+      <h1 class="landing-title">The Backroom</h1>
+      <p class="landing-tagline">Invite-only stakes. Real hands. No app store required.</p>
+      <button id="btn-landing-enter" class="btn-primary landing-cta">Enter</button>
+      <p class="landing-fine">Private tables, live multiplayer hold'em, and a house that always collects its cut.</p>
+    </div>
+  </div>
+</section>
+
 <!-- AUTH -->
-<section id="view-auth" class="view">
+<section id="view-auth" class="view hidden">
   <div class="auth-card">
     <h1>&#9824; The Backroom</h1>
     <div class="tabs">
@@ -39,6 +52,7 @@
   <header class="topbar">
     <h1>&#9824; The Backroom</h1>
     <div class="user-pill">
+      <span id="lobby-avatar"></span>
       <span id="lobby-username"></span>
       <span id="lobby-admin-badge" class="badge hidden">ADMIN</span>
       <span id="lobby-balance" class="badge gold"></span>

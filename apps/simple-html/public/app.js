@@ -87,9 +87,26 @@ function cardColor(card) {
   return (card.includes('♥') || card.includes('♦')) ? 'red' : '';
 }
 
+function avatarColor(name) {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  return `hsl(${Math.abs(hash) % 360}, 55%, 42%)`;
+}
+
+function avatarHtml(username) {
+  const initial = (username || '?').charAt(0).toUpperCase();
+  return `<div class="avatar" style="background:${avatarColor(username || '?')}">${initial}</div>`;
+}
+
 function renderCard(card, faceDown = false) {
   if (faceDown || card === '??') return `<div class="playing-card back"></div>`;
-  return `<div class="playing-card ${cardColor(card)}">${card}</div>`;
+  const suit = card.slice(-1);
+  const rank = card.slice(0, -1);
+  return `<div class="playing-card ${cardColor(card)}">
+    <span class="card-corner card-corner-top">${rank}<br>${suit}</span>
+    <span class="card-suit-big">${suit}</span>
+    <span class="card-corner card-corner-bottom">${rank}<br>${suit}</span>
+  </div>`;
 }
 
 // ---------- auth ----------
@@ -146,6 +163,7 @@ $('#btn-logout').addEventListener('click', () => {
 // ---------- lobby ----------
 function enterLobby() {
   $('#lobby-username').textContent = state.user.username;
+  $('#lobby-avatar').innerHTML = avatarHtml(state.user.username);
   $('#lobby-admin-badge').classList.toggle('hidden', !state.user.is_admin);
   $('#btn-manage-chips').classList.toggle('hidden', !state.user.is_admin);
   showView('lobby');
@@ -517,10 +535,13 @@ async function renderGameState(gameRow) {
     const showFaceUp = p.id === state.user.id || gs.stage === 'complete' || gs.stage === 'showdown';
     const won = (gs.potBreakdown || []).some(pb => pb.winners.some(w => w.id === p.id));
 
+    const username = p.id === state.user.id ? 'You' : (players.find(rp => rp.user_id === p.id)?.username || 'Player');
+
     return `<div class="seat ${p.folded ? 'folded' : ''} ${isActing ? 'acting' : ''}" style="left:${x}%; top:${y}%;">
       <div class="seat-card">
         ${isDealer ? '<div class="dealer-chip">D</div>' : ''}
-        <div class="seat-name">${p.id === state.user.id ? 'You' : (players.find(rp => rp.user_id === p.id)?.username || 'Player')}</div>
+        ${avatarHtml(username)}
+        <div class="seat-name">${username}</div>
         <div class="seat-chips">${p.chips} chips</div>
         ${p.committed ? `<div class="seat-bet">Bet ${p.committed}</div>` : ''}
         <div class="seat-cards">${p.holeCards.map(c => renderCard(c, !showFaceUp && c !== '??' ? false : c === '??')).join('')}</div>
@@ -543,6 +564,7 @@ function renderIdleSeat(p, i, total) {
   const y = 50 + 40 * Math.sin(angle);
   return `<div class="seat ${p.is_ready ? 'ready' : ''}" style="left:${x}%; top:${y}%;">
     <div class="seat-card">
+      ${avatarHtml(p.username)}
       <div class="seat-name">${p.username}</div>
       <div class="seat-chips">${p.chips} chips</div>
       <div class="seat-ready-badge">${p.is_ready ? '&#10003; Ready' : 'Waiting&hellip;'}</div>
@@ -712,11 +734,13 @@ $('#btn-my-history').addEventListener('click', async () => {
 });
 $('#btn-close-stats').addEventListener('click', () => $('#modal-stats').classList.add('hidden'));
 
+$('#btn-landing-enter').addEventListener('click', () => showView('auth'));
+
 // ---------- boot ----------
 if (state.token && state.user) {
   enterLobby();
   const savedRoom = localStorage.getItem('ts_room');
   if (savedRoom) enterTable(savedRoom);
 } else {
-  showView('auth');
+  showView('landing');
 }
