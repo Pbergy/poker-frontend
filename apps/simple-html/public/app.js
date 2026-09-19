@@ -395,6 +395,7 @@ async function refreshRoomHeader(roomId) {
     $('#table-room-name').textContent = room ? room.name : 'Table';
     state.isSpectating = !!(room && room.is_admin_room && room.creator_id === state.user.id);
     state.currentRoomIsAdminRoom = !!(room && room.is_admin_room);
+    state.currentRoomMaxPlayers = room?.max_players || null;
 
     $('#btn-table-invite').classList.add('hidden');
     if (state.user.is_admin && room && room.is_admin_room) {
@@ -519,10 +520,15 @@ async function renderGameState(gameRow) {
   const gs = gameRow && gameRow.game_state;
 
   if (!gs || gameRow.status === 'no_game') {
-    $('#seats').innerHTML = players.map((p, i) => renderIdleSeat(p, i, players.length)).join('');
+    const totalSeats = Math.max(players.length, state.currentRoomMaxPlayers || 0, 2);
+    const seatHtml = [];
+    for (let i = 0; i < totalSeats; i++) {
+      seatHtml.push(players[i] ? renderIdleSeat(players[i], i, totalSeats) : renderEmptySeat(i, totalSeats));
+    }
+    $('#seats').innerHTML = seatHtml.join('');
     $('#community-cards').innerHTML = '';
-    $('#pot-display').textContent = 'Pot: 0';
-    $('#table-pot-badge').textContent = 'Pot: 0';
+    $('#pot-display').innerHTML = '<span class="chip-icon"></span> Pot: 0';
+    $('#table-pot-badge').innerHTML = '<span class="chip-icon"></span> Pot: 0';
     $('#action-bar').classList.add('hidden');
     state.lastHandNumber = null;
     return;
@@ -535,8 +541,8 @@ async function renderGameState(gameRow) {
 
   $('#community-cards').innerHTML = gs.community.map(c => renderCard(c)).join('');
   const potNow = gs.pot + gs.players.reduce((s, p) => s + p.committed, 0);
-  $('#pot-display').textContent = `Pot: ${potNow}`;
-  $('#table-pot-badge').textContent = `Pot: ${potNow}`;
+  $('#pot-display').innerHTML = `<span class="chip-icon"></span> Pot: ${potNow}`;
+  $('#table-pot-badge').innerHTML = `<span class="chip-icon"></span> Pot: ${potNow}`;
 
   const seatsHtml = gs.players.map((p, i) => {
     const angle = (2 * Math.PI * i) / gs.players.length - Math.PI / 2;
@@ -554,7 +560,7 @@ async function renderGameState(gameRow) {
         ${isDealer ? '<div class="dealer-chip">D</div>' : ''}
         ${avatarHtml(username)}
         <div class="seat-name">${username}</div>
-        <div class="seat-chips">${p.chips} chips</div>
+        <div class="seat-chips"><span class="chip-icon"></span>${p.chips} chips</div>
         ${p.committed ? `<div class="seat-bet">Bet ${p.committed}</div>` : ''}
         <div class="seat-cards">${p.holeCards.map(c => renderCard(c, !showFaceUp && c !== '??' ? false : c === '??')).join('')}</div>
         ${won ? '<div class="win-banner">WINS</div>' : ''}
@@ -570,15 +576,27 @@ async function renderGameState(gameRow) {
   updateActionBar(gs);
 }
 
-function renderIdleSeat(p, i, total) {
+function seatPosition(i, total) {
   const angle = (2 * Math.PI * i) / total - Math.PI / 2;
-  const x = 50 + 42 * Math.cos(angle);
-  const y = 50 + 40 * Math.sin(angle);
+  return { x: 50 + 42 * Math.cos(angle), y: 50 + 40 * Math.sin(angle) };
+}
+
+function renderEmptySeat(i, total) {
+  const { x, y } = seatPosition(i, total);
+  return `<div class="seat empty-seat" style="left:${x}%; top:${y}%;">
+    <div class="seat-card">
+      <div class="empty-seat-label">Empty Seat</div>
+    </div>
+  </div>`;
+}
+
+function renderIdleSeat(p, i, total) {
+  const { x, y } = seatPosition(i, total);
   return `<div class="seat ${p.is_ready ? 'ready' : ''}" style="left:${x}%; top:${y}%;">
     <div class="seat-card">
       ${avatarHtml(p.username)}
       <div class="seat-name">${p.username}</div>
-      <div class="seat-chips">${p.chips} chips</div>
+      <div class="seat-chips"><span class="chip-icon"></span>${p.chips} chips</div>
       <div class="seat-ready-badge">${p.is_ready ? '&#10003; Ready' : 'Waiting&hellip;'}</div>
     </div>
   </div>`;
