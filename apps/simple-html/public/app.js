@@ -449,7 +449,7 @@ function connectWS(roomId) {
   state.leavingTable = false;
   state.wsRetryDelay = 1000;
 
-  const ws = new WebSocket(WS_BASE);
+  const ws = new WebSocket(`${WS_BASE}?token=${encodeURIComponent(state.token)}`);
   state.ws = ws;
   ws.addEventListener('open', () => {
     ws.send(JSON.stringify({ type: 'join', userId: state.user.id, roomId }));
@@ -465,7 +465,16 @@ function connectWS(roomId) {
     else if (msg.type === 'hand_complete') { loadHandLog(roomId); loadHandHistory(roomId); playSound('win'); }
     else if (msg.type === 'error') showToast(msg.message);
   });
-  ws.addEventListener('close', () => {
+  ws.addEventListener('close', (evt) => {
+    // A bad/expired token will just fail the same way forever — don't keep retrying,
+    // send the person back to login instead.
+    if (evt.code === 4001 || evt.code === 4003) {
+      showToast('Your session is no longer valid — please log in again');
+      localStorage.removeItem('ts_token'); localStorage.removeItem('ts_user'); localStorage.removeItem('ts_room');
+      state.token = null; state.user = null;
+      showView('auth');
+      return;
+    }
     // Fall back to REST polling immediately, and keep trying to re-establish the socket
     // with backoff (capped at 10s) so a dropped connection heals itself automatically.
     if (!state.pollTimer) state.pollTimer = setInterval(refreshTable, 2500);
