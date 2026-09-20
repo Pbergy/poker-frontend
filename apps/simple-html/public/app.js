@@ -606,6 +606,7 @@ async function renderGameState(gameRow) {
         ${p.committed ? `<div class="seat-bet">Bet ${p.committed}</div>` : ''}
         <div class="seat-cards">${p.holeCards.map(c => renderCard(c, !showFaceUp && c !== '??' ? false : c === '??')).join('')}</div>
         ${won ? '<div class="win-banner">WINS</div>' : ''}
+        ${adminChipControlsHtml(username)}
       </div>
     </div>`;
   }).join('');
@@ -622,6 +623,32 @@ function seatPosition(i, total) {
   const angle = (2 * Math.PI * i) / total - Math.PI / 2;
   return { x: 50 + 42 * Math.cos(angle), y: 50 + 40 * Math.sin(angle) };
 }
+
+// Compact inline give/take controls shown on a seat when the viewer is the admin of this
+// private table — lets chips be adjusted mid-hand without leaving the table view.
+function adminChipControlsHtml(username) {
+  if (!state.user.is_admin || !state.currentRoomIsAdminRoom || username === state.user.username || username === 'You') return '';
+  return `<div class="seat-admin-controls">
+    <button class="chip-adjust-btn" data-chip-adjust="${username}" data-sign="1">+</button>
+    <button class="chip-adjust-btn" data-chip-adjust="${username}" data-sign="-1">&minus;</button>
+  </div>`;
+}
+
+// One delegated listener handles every seat's +/- buttons, since seats are re-rendered often.
+$('#seats').addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-chip-adjust]');
+  if (!btn) return;
+  const username = btn.dataset.chipAdjust;
+  const sign = Number(btn.dataset.sign);
+  const raw = prompt(`${sign > 0 ? 'Give' : 'Take'} how many chips ${sign > 0 ? 'to' : 'from'} ${username}?`);
+  const amount = Math.abs(Number(raw)) * sign;
+  if (!raw || !amount) return;
+  try {
+    await api(`/api/admin/rooms/${state.roomId}/give-chips`, { method: 'POST', body: { username, amount } });
+    showToast(`${amount > 0 ? 'Gave' : 'Took'} ${Math.abs(amount)} chips ${amount > 0 ? 'to' : 'from'} ${username}`);
+    refreshTable();
+  } catch (err) { showToast(err.message); }
+});
 
 function renderEmptySeat(i, total) {
   const { x, y } = seatPosition(i, total);
@@ -640,6 +667,7 @@ function renderIdleSeat(p, i, total) {
       <div class="seat-name">${p.username}</div>
       <div class="seat-chips"><span class="chip-icon"></span>${p.chips} chips</div>
       <div class="seat-ready-badge">${p.is_ready ? '&#10003; Ready' : 'Waiting&hellip;'}</div>
+      ${adminChipControlsHtml(p.username)}
     </div>
   </div>`;
 }
