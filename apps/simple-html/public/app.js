@@ -260,6 +260,7 @@ async function loadMyAdminRooms(isRetry = false) {
       <div class="room-row">
         <div><strong>${r.name}</strong><div class="room-meta">Code ${r.room_code}</div></div>
         <div style="display:flex; gap:6px;">
+          <button class="btn-link" data-rename="${r.id}">Rename</button>
           <button class="btn-link" data-invite="${r.id}">Invite</button>
           <button class="btn-primary small" data-joinadmin="${r.id}">Join</button>
           <button class="btn-link" data-deleteroom="${r.id}" style="color:#ff9aa8;">Delete</button>
@@ -267,6 +268,15 @@ async function loadMyAdminRooms(isRetry = false) {
       </div>`).join('');
     infoEl.querySelectorAll('[data-invite]').forEach(b => b.addEventListener('click', () => openInviteModal(b.dataset.invite)));
     infoEl.querySelectorAll('[data-joinadmin]').forEach(b => b.addEventListener('click', () => joinRoomById(b.dataset.joinadmin)));
+    infoEl.querySelectorAll('[data-rename]').forEach(b => b.addEventListener('click', async () => {
+      const current = mine.find(r => r.id === b.dataset.rename)?.name || '';
+      const name = prompt('Rename this table:', current);
+      if (name === null || !name.trim()) return;
+      try {
+        await api(`/api/admin/rooms/${b.dataset.rename}/rename`, { method: 'PATCH', body: { name: name.trim() } });
+        loadMyAdminRooms();
+      } catch (err) { showToast(err.message); }
+    }));
     infoEl.querySelectorAll('[data-deleteroom]').forEach(b => b.addEventListener('click', async () => {
       if (!confirm('Delete this table? Everyone seated in it will be removed.')) return;
       await api(`/api/admin/rooms/${b.dataset.deleteroom}`, { method: 'DELETE' }).catch(err => showToast(err.message));
@@ -283,9 +293,11 @@ async function loadMyAdminRooms(isRetry = false) {
 }
 
 async function createAdminRoom() {
+  const name = prompt('Name this table:', `${state.user.username}'s Table`);
+  if (name === null) return; // cancelled
   try {
-    const room = await api('/api/admin/rooms', { method: 'POST', body: { name: `${state.user.username}'s Table` } });
-    showToast(`Private table created — code ${room.room_code}`);
+    const room = await api('/api/admin/rooms', { method: 'POST', body: { name: name.trim() || `${state.user.username}'s Table` } });
+    showToast(`"${room.name}" created — code ${room.room_code}`);
     loadMyAdminRooms();
   } catch (err) { showToast(err.message); }
 }
@@ -308,12 +320,21 @@ async function loadInvites() {
           <input type="number" class="give-chips-amount" data-user="${i.username}" placeholder="amount" min="0" style="width:70px; margin:0; padding:4px;">
           <button class="btn-link" data-give="${i.username}">Give</button>
           <button class="btn-link" data-take="${i.username}" style="color:#ff9aa8;">Take</button>
+          ${i.chips != null ? `<button class="btn-link" data-kick="${i.username}" style="color:#ff9aa8;">Kick</button>` : ''}
           <button class="btn-link" data-revoke="${i.username}" style="color:#ff9aa8;">remove</button>
         </div>
       </div>`).join('') || '<p class="muted">No invites yet.</p>';
     $$('[data-revoke]').forEach(b => b.addEventListener('click', async () => {
       await api(`/api/admin/rooms/${inviteRoomId}/invite/${b.dataset.revoke}`, { method: 'DELETE' });
       loadInvites();
+    }));
+    $$('[data-kick]').forEach(b => b.addEventListener('click', async () => {
+      if (!confirm(`Kick ${b.dataset.kick} from this table? Their chips there will be cashed out to their balance.`)) return;
+      try {
+        const result = await api(`/api/admin/rooms/${inviteRoomId}/kick`, { method: 'POST', body: { username: b.dataset.kick } });
+        showToast(`Kicked ${b.dataset.kick}${result.cashedOut > 0 ? ` — cashed out ${result.cashedOut} chips` : ''}`);
+        loadInvites();
+      } catch (err) { showToast(err.message); }
     }));
     const doAdjust = async (username, sign) => {
       const input = document.querySelector(`.give-chips-amount[data-user="${username}"]`);
@@ -393,9 +414,12 @@ async function refreshRoomHeader(roomId) {
   try {
     const room = await api(`/api/rooms/id/${roomId}`).catch(() => null);
     $('#table-room-name').textContent = room ? room.name : 'Table';
-    state.isSpectating = !!(room && room.is_admin_room && room.creator_id === state.user.id);
     state.currentRoomIsAdminRoom = !!(room && room.is_admin_room);
     state.currentRoomMaxPlayers = room?.max_players || null;
+
+    const players = await loadRoomPlayers();
+    const mine = players.find(p => p.user_id === state.user.id);
+    state.isSpectating = state.currentRoomIsAdminRoom && (!mine || !mine.wants_to_play);
 
     $('#btn-table-invite').classList.add('hidden');
     if (state.user.is_admin && room && room.is_admin_room) {
@@ -403,10 +427,28 @@ async function refreshRoomHeader(roomId) {
       $('#btn-table-invite').onclick = () => openInviteModal(roomId);
     }
 
-    // The admin spectates their own private table — no ready button, never dealt in.
+    // Only private (admin) tables have a play/spectate choice at all.
+    $('#btn-join-hand').classList.toggle('hidden', !state.currentRoomIsAdminRoom || !state.isSpectating);
+    $('#btn-spectate').classList.toggle('hidden', !state.currentRoomIsAdminRoom || state.isSpectating);
     $('#btn-ready').classList.toggle('hidden', state.isSpectating);
   } catch (e) { /* non-fatal */ }
 }
+
+$('#btn-join-hand').addEventListener('click', async () => {
+  try {
+    await api(`/api/rooms/${state.roomId}/play`, { method: 'POST', body: { playing: true } });
+    await refreshRoomHeader(state.roomId);
+    refreshTable();
+  } catch (err) { showToast(err.message); }
+});
+
+$('#btn-spectate').addEventListener('click', async () => {
+  try {
+    await api(`/api/rooms/${state.roomId}/play`, { method: 'POST', body: { playing: false } });
+    await refreshRoomHeader(state.roomId);
+    refreshTable();
+  } catch (err) { showToast(err.message); }
+});
 
 $('#btn-leave-table').addEventListener('click', async () => {
   state.leavingTable = true;
