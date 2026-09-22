@@ -333,7 +333,9 @@ async function loadInvites() {
       try {
         const result = await api(`/api/admin/rooms/${inviteRoomId}/kick`, { method: 'POST', body: { username: b.dataset.kick } });
         showToast(`Kicked ${b.dataset.kick}${result.cashedOut > 0 ? ` — cashed out ${result.cashedOut} chips` : ''}`);
+        lastRoomPlayers = [];
         loadInvites();
+        if (state.roomId === inviteRoomId) refreshTable();
       } catch (err) { showToast(err.message); }
     }));
     const doAdjust = async (username, sign) => {
@@ -343,7 +345,9 @@ async function loadInvites() {
       try {
         await api(`/api/admin/rooms/${inviteRoomId}/give-chips`, { method: 'POST', body: { username, amount } });
         showToast(`${amount > 0 ? 'Gave' : 'Took'} ${Math.abs(amount)} chips ${amount > 0 ? 'to' : 'from'} ${username}`);
+        lastRoomPlayers = []; // don't let the table view show stale chip counts after this
         loadInvites();
+        if (state.roomId === inviteRoomId) refreshTable();
       } catch (err) { showToast(err.message); }
     };
     $$('[data-give]').forEach(b => b.addEventListener('click', () => doAdjust(b.dataset.give, 1)));
@@ -646,6 +650,7 @@ $('#seats').addEventListener('click', async (e) => {
   try {
     await api(`/api/admin/rooms/${state.roomId}/give-chips`, { method: 'POST', body: { username, amount } });
     showToast(`${amount > 0 ? 'Gave' : 'Took'} ${Math.abs(amount)} chips ${amount > 0 ? 'to' : 'from'} ${username}`);
+    lastRoomPlayers = []; // the chip counts just changed server-side — don't render the stale cache
     refreshTable();
   } catch (err) { showToast(err.message); }
 });
