@@ -510,6 +510,17 @@ function connectWS(roomId) {
     else if (msg.type === 'ready_update') applyReadyUpdate(msg.players);
     else if (msg.type === 'presence') loadRoomPlayers().then(() => refreshTable());
     else if (msg.type === 'hand_complete') { loadHandLog(roomId); loadHandHistory(roomId); playSound('win'); }
+    else if (msg.type === 'room_deleted') {
+      showToast('This table was deleted by the admin');
+      state.leavingTable = true;
+      if (state.ws) state.ws.close();
+      if (state.pollTimer) clearInterval(state.pollTimer);
+      state.roomId = null;
+      localStorage.removeItem('ts_room');
+      showView('lobby');
+      loadPublicRooms();
+      refreshMyBalance();
+    }
     else if (msg.type === 'error') showToast(msg.message);
   });
   ws.addEventListener('close', (evt) => {
