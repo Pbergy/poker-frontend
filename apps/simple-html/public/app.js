@@ -224,11 +224,21 @@ async function loadPublicRooms() {
           <div><strong>${r.name}</strong></div>
           <div class="room-meta">Code ${r.room_code} &middot; up to ${r.max_players} players</div>
         </div>
-        <button class="btn-primary small" data-room="${r.id}">Join</button>
+        <div style="display:flex; gap:6px;">
+          <button class="btn-primary small" data-room="${r.id}">Join</button>
+          ${state.user.is_admin ? `<button class="btn-link" data-deletepublic="${r.id}" style="color:#ff9aa8;">Delete</button>` : ''}
+        </div>
       </div>`).join('');
     list.querySelectorAll('button[data-room]').forEach(btn => {
       btn.addEventListener('click', () => joinRoomById(btn.dataset.room));
     });
+    list.querySelectorAll('[data-deletepublic]').forEach(btn => btn.addEventListener('click', async () => {
+      if (!confirm('Delete this room? Everyone seated in it will be removed.')) return;
+      try {
+        await api(`/api/admin/rooms/${btn.dataset.deletepublic}`, { method: 'DELETE' });
+        loadPublicRooms();
+      } catch (err) { showToast(err.message); }
+    }));
   } catch (err) { showToast(err.message); }
 }
 
@@ -435,6 +445,7 @@ async function refreshRoomHeader(roomId) {
     $('#btn-join-hand').classList.toggle('hidden', !state.currentRoomIsAdminRoom || !state.isSpectating);
     $('#btn-spectate').classList.toggle('hidden', !state.currentRoomIsAdminRoom || state.isSpectating);
     $('#btn-ready').classList.toggle('hidden', state.isSpectating);
+    $('#tab-players').classList.toggle('hidden', !(state.user.is_admin && state.currentRoomIsAdminRoom));
   } catch (e) { /* non-fatal */ }
 }
 
@@ -555,7 +566,39 @@ async function loadRoomPlayers() {
   lastRoomPlayers = await api(`/api/players/room/${state.roomId}`).catch(() => []);
   const mine = lastRoomPlayers.find(p => p.user_id === state.user.id);
   if (mine) { state.isReady = !!mine.is_ready; updateReadyButton(); }
+  renderPlayersChipPanel();
   return lastRoomPlayers;
+}
+
+// Dedicated sidebar list (visible only to the admin at their own private table) showing
+// every seated player's chip count with inline give/take controls — an easier target than
+// the small +/- buttons scattered around the oval table, especially with several players.
+function renderPlayersChipPanel() {
+  if (!state.user.is_admin || !state.currentRoomIsAdminRoom) return;
+  const others = lastRoomPlayers.filter(p => p.user_id !== state.user.id);
+  $('#players-chip-list').innerHTML = others.map(p => `
+    <div class="invite-row">
+      <span>${p.username} &mdash; ${p.chips} chips</span>
+      <div style="display:flex; gap:6px; align-items:center;">
+        <input type="number" class="panel-chip-amount" data-user="${p.username}" placeholder="amount" min="0" style="width:70px; margin:0; padding:4px;">
+        <button class="btn-link" data-panel-give="${p.username}">Give</button>
+        <button class="btn-link" data-panel-take="${p.username}" style="color:#ff9aa8;">Take</button>
+      </div>
+    </div>`).join('') || '<p class="muted">No one seated yet.</p>';
+
+  const doAdjust = async (username, sign) => {
+    const input = document.querySelector(`.panel-chip-amount[data-user="${username}"]`);
+    const amount = Math.abs(Number(input.value)) * sign;
+    if (!amount) return;
+    try {
+      await api(`/api/admin/rooms/${state.roomId}/give-chips`, { method: 'POST', body: { username, amount } });
+      showToast(`${amount > 0 ? 'Gave' : 'Took'} ${Math.abs(amount)} chips ${amount > 0 ? 'to' : 'from'} ${username}`);
+      lastRoomPlayers = [];
+      refreshTable();
+    } catch (err) { showToast(err.message); }
+  };
+  $$('[data-panel-give]').forEach(b => b.addEventListener('click', () => doAdjust(b.dataset.panelGive, 1)));
+  $$('[data-panel-take]').forEach(b => b.addEventListener('click', () => doAdjust(b.dataset.panelTake, -1)));
 }
 
 function applyReadyUpdate(players) {
