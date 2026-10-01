@@ -98,11 +98,12 @@ function avatarHtml(username) {
   return `<div class="avatar" style="background:${avatarColor(username || '?')}">${initial}</div>`;
 }
 
-function renderCard(card, faceDown = false) {
+function renderCard(card, faceDown = false, delaySeconds = 0) {
   if (faceDown || card === '??') return `<div class="playing-card back"></div>`;
   const suit = card.slice(-1);
   const rank = card.slice(0, -1);
-  return `<div class="playing-card ${cardColor(card)}">
+  const delayStyle = delaySeconds ? ` style="animation-delay:${delaySeconds}s"` : '';
+  return `<div class="playing-card ${cardColor(card)}"${delayStyle}>
     <span class="card-corner card-corner-top">${rank}<br>${suit}</span>
     <span class="card-suit-big">${suit}</span>
     <span class="card-corner card-corner-bottom">${rank}<br>${suit}</span>
@@ -441,6 +442,21 @@ async function refreshRoomHeader(roomId) {
       $('#btn-table-invite').onclick = () => openInviteModal(roomId);
     }
 
+    // The admin can set the blinds on any table, not just their own private one.
+    $('#btn-blinds').classList.toggle('hidden', !state.user.is_admin);
+    $('#btn-blinds').textContent = room?.settings?.bigBlind ? `Blinds: ${room.settings.smallBlind}/${room.settings.bigBlind}` : 'Blinds';
+    $('#btn-blinds').onclick = async () => {
+      const sb = prompt('Small blind:', room?.settings?.smallBlind ?? 10);
+      if (sb === null) return;
+      const bb = prompt('Big blind:', room?.settings?.bigBlind ?? 20);
+      if (bb === null) return;
+      try {
+        await api(`/api/admin/rooms/${roomId}/blinds`, { method: 'PATCH', body: { smallBlind: Number(sb), bigBlind: Number(bb) } });
+        showToast(`Blinds set to ${sb}/${bb} — takes effect next hand`);
+        refreshRoomHeader(roomId);
+      } catch (err) { showToast(err.message); }
+    };
+
     // Only private (admin) tables have a play/spectate choice at all.
     $('#btn-join-hand').classList.toggle('hidden', !state.currentRoomIsAdminRoom || !state.isSpectating);
     $('#btn-spectate').classList.toggle('hidden', !state.currentRoomIsAdminRoom || state.isSpectating);
@@ -639,7 +655,9 @@ async function renderGameState(gameRow) {
     state.lastHandNumber = gs.handNumber;
   }
 
-  $('#community-cards').innerHTML = gs.community.map(c => renderCard(c)).join('');
+  // Flip each community card in with a short stagger instead of all appearing at once —
+  // three at once for the flop looks more like an actual dealt board this way.
+  $('#community-cards').innerHTML = gs.community.map((c, i) => renderCard(c, false, i * 0.15)).join('');
   const potNow = gs.pot + gs.players.reduce((s, p) => s + p.committed, 0);
   $('#pot-display').innerHTML = `<span class="chip-icon"></span> Pot: ${potNow}`;
   $('#table-pot-badge').innerHTML = `<span class="chip-icon"></span> Pot: ${potNow}`;
@@ -852,8 +870,11 @@ async function loadManageChips() {
           <input type="number" class="manage-chips-amount" data-user="${u.username}" placeholder="amount" min="0" style="width:80px; margin:0; padding:4px;">
           <button class="btn-link" data-manage-give="${u.username}">Give</button>
           <button class="btn-link" data-manage-take="${u.username}" style="color:#ff9aa8;">Take</button>
+          <button class="btn-link" data-view-history="${u.username}">History</button>
         </div>
       </div>`).join('');
+
+    $$('[data-view-history]').forEach(b => b.addEventListener('click', () => showUserTransactions(b.dataset.viewHistory)));
 
     const doAdjust = async (username, sign) => {
       const input = document.querySelector(`.manage-chips-amount[data-user="${username}"]`);
@@ -869,6 +890,18 @@ async function loadManageChips() {
     $$('[data-manage-take]').forEach(b => b.addEventListener('click', () => doAdjust(b.dataset.manageTake, -1)));
   } catch (err) { showToast(err.message); }
 }
+
+async function showUserTransactions(username) {
+  try {
+    const txns = await api(`/api/admin/users/${username}/transactions`);
+    $('#user-txns-title').textContent = `${username}'s Transaction History`;
+    $('#user-txns-list').innerHTML = txns.map(t => `
+      <div>${new Date(t.created_at).toLocaleString()} &mdash; <strong>${t.amount >= 0 ? '+' : ''}${t.amount}</strong> (${t.type})<br><span class="muted">${t.description || ''}</span></div>
+    `).join('') || '<p class="muted">No transactions yet.</p>';
+    $('#modal-user-txns').classList.remove('hidden');
+  } catch (err) { showToast(err.message); }
+}
+$('#btn-close-user-txns').addEventListener('click', () => $('#modal-user-txns').classList.add('hidden'));
 
 // ---------- leaderboard ----------
 $('#btn-leaderboard').addEventListener('click', async () => {

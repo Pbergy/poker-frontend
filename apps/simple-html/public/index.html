@@ -107,6 +107,7 @@
     <div class="user-pill">
       <span id="table-pot-badge" class="badge gold">Pot: 0</span>
       <button id="btn-table-invite" class="btn-primary small hidden">Invite</button>
+      <button id="btn-blinds" class="btn-link hidden">Blinds</button>
       <button id="btn-join-hand" class="btn-primary small hidden">Join Hand</button>
       <button id="btn-spectate" class="btn-link hidden">Spectate</button>
       <button id="btn-ready" class="btn-primary small">I'm Ready</button>
@@ -185,6 +186,15 @@
     <p class="hint">New accounts start at 0 &mdash; this is the only way anyone gets chips outside of winning them. Enter an amount, then Give or Take.</p>
     <div id="manage-chips-list" class="invite-list"></div>
     <button id="btn-close-manage-chips" class="btn-link">Close</button>
+  </div>
+</div>
+
+<!-- USER TRANSACTION HISTORY MODAL -->
+<div id="modal-user-txns" class="modal hidden">
+  <div class="modal-box">
+    <h2 id="user-txns-title">Transaction History</h2>
+    <div id="user-txns-list" class="log-list"></div>
+    <button id="btn-close-user-txns" class="btn-link">Close</button>
   </div>
 </div>
 
