@@ -172,6 +172,37 @@ function enterLobby() {
   ensureAdminRoomUI();
   loadInvitedRooms();
   refreshMyBalance();
+  ensureAllUsersPanel();
+}
+
+// A standing, always-visible panel (not buried in a modal) showing every signed-up
+// account and its current chip balance — admin-only.
+function ensureAllUsersPanel() {
+  if (!state.user.is_admin) return;
+  if (!$('#all-users-card')) {
+    const card = document.createElement('div');
+    card.className = 'card wide';
+    card.id = 'all-users-card';
+    card.innerHTML = `<h2>All Users</h2><div id="all-users-list"><p class="muted">Loading&hellip;</p></div>`;
+    $('.lobby-grid').appendChild(card);
+  }
+  loadAllUsersPanel();
+}
+
+async function loadAllUsersPanel() {
+  try {
+    const users = await api('/api/admin/users');
+    const listEl = $('#all-users-list');
+    if (!listEl) return;
+    listEl.innerHTML = users.map(u => `
+      <div class="room-row">
+        <div>${avatarHtml(u.username)}</div>
+        <div style="flex:1; margin-left:10px;">
+          <strong>${u.username}</strong>${u.is_admin ? ' <span class="badge">ADMIN</span>' : ''}${u.is_banned ? ' <span class="badge" style="color:#ff9aa8;">BANNED</span>' : ''}
+        </div>
+        <span class="badge gold"><span class="chip-icon"></span> ${u.balance} chips</span>
+      </div>`).join('') || '<p class="muted">No users yet.</p>';
+  } catch (err) { /* non-fatal on lobby load */ }
 }
 
 async function refreshMyBalance() {
