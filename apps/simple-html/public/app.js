@@ -152,12 +152,35 @@ function onAuthed(data) {
   localStorage.setItem('ts_token', state.token);
   localStorage.setItem('ts_user', JSON.stringify(state.user));
   enterLobby();
+  connectLobbyWS();
+}
+
+// A connection kept alive for the whole session (separate from the table-specific one in
+// connectWS) purely so things like "you were just invited to a table" can reach someone
+// sitting in the lobby — not just people currently inside a specific room.
+function connectLobbyWS() {
+  if (state.lobbyWs && state.lobbyWs.readyState === WebSocket.OPEN) return;
+  const ws = new WebSocket(`${WS_BASE}?token=${encodeURIComponent(state.token)}`);
+  state.lobbyWs = ws;
+  ws.addEventListener('message', (evt) => {
+    const msg = JSON.parse(evt.data);
+    if (msg.type === 'new_invite') {
+      showToast(`You've been invited to "${msg.roomName}"!`);
+      playSound('deal');
+      if (!document.getElementById('view-lobby').classList.contains('hidden')) loadInvitedRooms();
+    }
+  });
+  ws.addEventListener('close', () => {
+    // Keep this channel alive for the whole session, same backoff pattern as the table socket.
+    if (state.token) setTimeout(connectLobbyWS, 3000);
+  });
 }
 
 $('#btn-logout').addEventListener('click', () => {
   localStorage.removeItem('ts_token');
   localStorage.removeItem('ts_user');
   state.token = null; state.user = null;
+  if (state.lobbyWs) { state.lobbyWs.onclose = null; state.lobbyWs.close(); state.lobbyWs = null; }
   showView('auth');
 });
 
@@ -199,9 +222,30 @@ async function loadAllUsersPanel() {
         <div>${avatarHtml(u.username)}</div>
         <div style="flex:1; margin-left:10px;">
           <strong>${u.username}</strong>${u.is_admin ? ' <span class="badge">ADMIN</span>' : ''}${u.is_banned ? ' <span class="badge" style="color:#ff9aa8;">BANNED</span>' : ''}
+          <div class="room-meta"><span class="chip-icon"></span> ${u.balance} chips</div>
         </div>
-        <span class="badge gold"><span class="chip-icon"></span> ${u.balance} chips</span>
+        ${!u.is_admin ? `
+        <div style="display:flex; gap:6px; align-items:center;">
+          <input type="number" class="all-users-amount" data-user="${u.username}" placeholder="amount" min="0" style="width:70px; margin:0; padding:4px;">
+          <button class="btn-link" data-allusers-give="${u.username}">Give</button>
+          <button class="btn-link" data-allusers-take="${u.username}" style="color:#ff9aa8;">Take</button>
+          <button class="btn-link" data-allusers-history="${u.username}">History</button>
+        </div>` : ''}
       </div>`).join('') || '<p class="muted">No users yet.</p>';
+
+    const doAdjust = async (username, sign) => {
+      const input = document.querySelector(`.all-users-amount[data-user="${username}"]`);
+      const amount = Math.abs(Number(input.value)) * sign;
+      if (!amount) return;
+      try {
+        await api(`/api/admin/users/${username}/give-chips`, { method: 'POST', body: { amount } });
+        showToast(`${amount > 0 ? 'Gave' : 'Took'} ${Math.abs(amount)} chips ${amount > 0 ? 'to' : 'from'} ${username}`);
+        loadAllUsersPanel();
+      } catch (err) { showToast(err.message); }
+    };
+    $$('[data-allusers-give]').forEach(b => b.addEventListener('click', () => doAdjust(b.dataset.allusersGive, 1)));
+    $$('[data-allusers-take]').forEach(b => b.addEventListener('click', () => doAdjust(b.dataset.allusersTake, -1)));
+    $$('[data-allusers-history]').forEach(b => b.addEventListener('click', () => showUserTransactions(b.dataset.allusersHistory)));
   } catch (err) { /* non-fatal on lobby load */ }
 }
 
@@ -966,6 +1010,7 @@ $('#btn-landing-enter').addEventListener('click', () => showView('auth'));
 // ---------- boot ----------
 if (state.token && state.user) {
   enterLobby();
+  connectLobbyWS();
   const savedRoom = localStorage.getItem('ts_room');
   if (savedRoom) enterTable(savedRoom);
 } else {
