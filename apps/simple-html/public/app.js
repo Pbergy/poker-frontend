@@ -230,6 +230,7 @@ async function loadAllUsersPanel() {
           <button class="btn-link" data-allusers-give="${u.username}">Give</button>
           <button class="btn-link" data-allusers-take="${u.username}" style="color:#ff9aa8;">Take</button>
           <button class="btn-link" data-allusers-history="${u.username}">History</button>
+          <button class="btn-link" data-allusers-delete="${u.username}" style="color:#ff9aa8;">Delete</button>
         </div>` : ''}
       </div>`).join('') || '<p class="muted">No users yet.</p>';
 
@@ -246,6 +247,14 @@ async function loadAllUsersPanel() {
     $$('[data-allusers-give]').forEach(b => b.addEventListener('click', () => doAdjust(b.dataset.allusersGive, 1)));
     $$('[data-allusers-take]').forEach(b => b.addEventListener('click', () => doAdjust(b.dataset.allusersTake, -1)));
     $$('[data-allusers-history]').forEach(b => b.addEventListener('click', () => showUserTransactions(b.dataset.allusersHistory)));
+    $$('[data-allusers-delete]').forEach(b => b.addEventListener('click', async () => {
+      if (!confirm(`Permanently delete ${b.dataset.allusersDelete}'s account? This can't be undone.`)) return;
+      try {
+        await api(`/api/admin/users/${b.dataset.allusersDelete}`, { method: 'DELETE' });
+        showToast(`Deleted ${b.dataset.allusersDelete}'s account`);
+        loadAllUsersPanel();
+      } catch (err) { showToast(err.message); }
+    }));
   } catch (err) { /* non-fatal on lobby load */ }
 }
 
