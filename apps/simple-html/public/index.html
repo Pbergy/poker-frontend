@@ -60,7 +60,9 @@
       <span id="lobby-username"></span>
       <span id="lobby-admin-badge" class="badge hidden">ADMIN</span>
       <span id="lobby-balance" class="badge gold"></span>
+      <button id="btn-request-chips" class="btn-link hidden">Request Chips</button>
       <button id="btn-manage-chips" class="btn-link hidden">Manage Chips</button>
+      <button id="btn-chip-requests" class="btn-link hidden">Requests</button>
       <button id="btn-leaderboard" class="btn-link">Leaderboard</button>
       <button id="btn-my-history" class="btn-link">My Stats</button>
       <button id="btn-logout" class="btn-link">Log Out</button>
@@ -186,6 +188,15 @@
     <p class="hint">New accounts start at 0 &mdash; this is the only way anyone gets chips outside of winning them. Enter an amount, then Give or Take.</p>
     <div id="manage-chips-list" class="invite-list"></div>
     <button id="btn-close-manage-chips" class="btn-link">Close</button>
+  </div>
+</div>
+
+<!-- CHIP REQUESTS MODAL (admin) -->
+<div id="modal-chip-requests" class="modal hidden">
+  <div class="modal-box">
+    <h2>Chip Requests</h2>
+    <div id="chip-requests-list" class="invite-list"></div>
+    <button id="btn-close-chip-requests" class="btn-link">Close</button>
   </div>
 </div>
 

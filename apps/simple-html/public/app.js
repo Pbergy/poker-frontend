@@ -168,6 +168,13 @@ function connectLobbyWS() {
       showToast(`You've been invited to "${msg.roomName}"!`);
       playSound('deal');
       if (!document.getElementById('view-lobby').classList.contains('hidden')) loadInvitedRooms();
+    } else if (msg.type === 'new_chip_request') {
+      showToast(`${msg.username} requested ${msg.amount} chips`);
+      if (!$('#modal-chip-requests').classList.contains('hidden')) loadChipRequests();
+    } else if (msg.type === 'chip_request_resolved') {
+      showToast(msg.status === 'approved' ? `Your request for ${msg.amount} chips was approved!` : 'Your chip request was denied');
+      if (msg.status === 'approved') playSound('win');
+      refreshMyBalance();
     }
   });
   ws.addEventListener('close', () => {
@@ -190,6 +197,8 @@ function enterLobby() {
   $('#lobby-avatar').innerHTML = avatarHtml(state.user.username);
   $('#lobby-admin-badge').classList.toggle('hidden', !state.user.is_admin);
   $('#btn-manage-chips').classList.toggle('hidden', !state.user.is_admin);
+  $('#btn-chip-requests').classList.toggle('hidden', !state.user.is_admin);
+  $('#btn-request-chips').classList.toggle('hidden', state.user.is_admin);
   showView('lobby');
   loadPublicRooms();
   ensureAdminRoomUI();
@@ -935,6 +944,44 @@ async function loadHandHistory(roomId) {
       return `<div><strong>Hand #${h.hand_number}</strong> — pot ${h.pot_amount}, rake ${h.rake_amount}<br>${winners.join(', ')}</div>`;
     }).join('') || '<p class="muted">No hands played yet.</p>';
   } catch (err) { /* ignore */ }
+}
+
+// ---------- chip requests ----------
+$('#btn-request-chips').addEventListener('click', async () => {
+  const amount = prompt('How many chips would you like to request from the admin?');
+  if (!amount || !Number(amount)) return;
+  try {
+    await api('/api/players/chip-requests', { method: 'POST', body: { amount: Number(amount) } });
+    showToast('Request sent to the admin');
+  } catch (err) { showToast(err.message); }
+});
+
+$('#btn-chip-requests').addEventListener('click', () => {
+  $('#modal-chip-requests').classList.remove('hidden');
+  loadChipRequests();
+});
+$('#btn-close-chip-requests').addEventListener('click', () => $('#modal-chip-requests').classList.add('hidden'));
+
+async function loadChipRequests() {
+  try {
+    const requests = await api('/api/admin/chip-requests');
+    $('#chip-requests-list').innerHTML = requests.map(r => `
+      <div class="invite-row">
+        <span>${r.username} wants <strong>${r.amount}</strong> chips</span>
+        <div style="display:flex; gap:6px;">
+          <button class="btn-link" data-approve-req="${r.id}">Approve</button>
+          <button class="btn-link" data-deny-req="${r.id}" style="color:#ff9aa8;">Deny</button>
+        </div>
+      </div>`).join('') || '<p class="muted">No pending requests.</p>';
+    $$('[data-approve-req]').forEach(b => b.addEventListener('click', async () => {
+      try { await api(`/api/admin/chip-requests/${b.dataset.approveReq}/approve`, { method: 'POST' }); loadChipRequests(); loadAllUsersPanel(); }
+      catch (err) { showToast(err.message); }
+    }));
+    $$('[data-deny-req]').forEach(b => b.addEventListener('click', async () => {
+      try { await api(`/api/admin/chip-requests/${b.dataset.denyReq}/deny`, { method: 'POST' }); loadChipRequests(); }
+      catch (err) { showToast(err.message); }
+    }));
+  } catch (err) { showToast(err.message); }
 }
 
 // ---------- manage chips (admin, account-wide) ----------
